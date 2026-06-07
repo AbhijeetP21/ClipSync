@@ -456,7 +456,15 @@ clipsync/
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the **Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)**.
+
+**Key terms:**
+- ✅ **Free for individuals**: You can use this project freely for personal, educational, or non-commercial purposes
+- ✅ **Attribution required**: You must give appropriate credit and indicate if changes were made
+- ❌ **Commercial use prohibited**: You cannot use this project for any commercial purpose or generate revenue from it
+- ❌ **No commercial licensing**: If you need to use this project commercially, please contact the author for a commercial license
+
+For the full legal code and more details, see the [LICENSE](LICENSE) file or visit [CC BY-NC 4.0](http://creativecommons.org/licenses/by-nc/4.0/).
 
 ## Support
 
