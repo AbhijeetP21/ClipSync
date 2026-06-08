@@ -30,7 +30,6 @@ const LANGUAGE_OPTIONS = [
   { value: 'ruby', label: 'Ruby' },
   { value: 'swift', label: 'Swift' },
   { value: 'kotlin', label: 'Kotlin' },
-  { value: 'rust', label: 'Rust' },
   { value: 'yaml', label: 'YAML' },
   { value: 'markdown', label: 'Markdown' },
   { value: 'xml', label: 'XML' },

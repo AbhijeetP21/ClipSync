@@ -437,4 +437,41 @@ export const Icons = {
       <polyline points="12 19 5 12 12 5"></polyline>
     </svg>
   ),
+
+  grip: ({ className, ...props }: React.HTMLAttributes<SVGElement>) => (
+    <svg
+      className={className}
+      {...props}
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      stroke="none"
+    >
+      <circle cx="9" cy="6" r="1.5"></circle>
+      <circle cx="15" cy="6" r="1.5"></circle>
+      <circle cx="9" cy="12" r="1.5"></circle>
+      <circle cx="15" cy="12" r="1.5"></circle>
+      <circle cx="9" cy="18" r="1.5"></circle>
+      <circle cx="15" cy="18" r="1.5"></circle>
+    </svg>
+  ),
+
+  restore: ({ className, ...props }: React.HTMLAttributes<SVGElement>) => (
+    <svg
+      className={className}
+      {...props}
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 7v6h6"></path>
+      <path d="M3 13a9 9 0 1 0 3-7.7L3 8"></path>
+    </svg>
+  ),
 }
