@@ -94,7 +94,7 @@ export function Sidebar() {
       </Sheet>
 
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex md:flex-col md:w-64 md:shrink-0 md:border-r bg-card">
+      <aside className="hidden md:flex md:flex-col md:w-64 md:shrink-0 md:border-r bg-card md:sticky md:top-0 md:h-screen">
         <div className="flex h-16 items-center border-b px-4">
           <h1 className="text-xl font-bold">ClipSync</h1>
         </div>
