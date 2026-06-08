@@ -209,14 +209,14 @@ export default function SavedPage() {
   return (
     <div className="flex-1 flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b">
+      <div className="flex flex-col gap-3 p-4 pl-16 border-b sm:flex-row sm:items-center sm:justify-between md:pl-4">
         <div className="flex items-center space-x-4">
           <h1 className="text-2xl font-bold">
             {currentPage.emoji} {currentPage.name}
           </h1>
           <span className="text-sm text-muted-foreground">{pageNotes.length} notes</span>
         </div>
-        <div className="flex space-x-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={openTrash}>
             <Icons.trash className="mr-2 h-4 w-4" />
             Trash

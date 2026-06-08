@@ -224,7 +224,7 @@ export function ClipCard({ clip, onDelete, onSave, onToggleCollapse }: ClipCardP
   return (
     <Card className="hover:shadow-md transition-shadow">
       <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center space-x-2">
             <Badge variant="outline" className="flex items-center space-x-1">
               {getTypeIcon()}

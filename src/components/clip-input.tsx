@@ -235,7 +235,7 @@ export function ClipInput({ onAddClip, isLoading = false }: ClipInputProps) {
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Type Selection */}
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {(['text', 'code', 'image', 'pdf'] as ClipType[]).map((clipType) => (
               <Button
                 key={clipType}
@@ -312,7 +312,7 @@ export function ClipInput({ onAddClip, isLoading = false }: ClipInputProps) {
           )}
 
           {/* Actions */}
-          <div className="flex justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex space-x-2">
               <Button type="submit" disabled={isLoading || isUploading}>
                 {isLoading || isUploading ? (
@@ -331,7 +331,7 @@ export function ClipInput({ onAddClip, isLoading = false }: ClipInputProps) {
                 Clear
               </Button>
             </div>
-            <div className="text-sm text-muted-foreground">
+            <div className="hidden text-sm text-muted-foreground sm:block">
               Tip: Press Ctrl+Enter to submit
             </div>
           </div>
