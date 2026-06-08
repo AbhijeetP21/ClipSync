@@ -18,7 +18,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const { isLoading, isAuthenticated } = useAuth()
   const { theme } = useStore()
 
-  const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname?.startsWith(route))
+  // The landing page ('/') is public via an exact match; other public routes
+  // match by prefix.
+  const isPublicRoute =
+    pathname === '/' || PUBLIC_ROUTES.some((route) => pathname?.startsWith(route))
 
   useEffect(() => {
     // Keep the document theme class in sync with the store.
