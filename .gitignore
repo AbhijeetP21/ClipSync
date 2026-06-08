@@ -31,6 +31,9 @@ yarn-error.log*
 .pnpm-debug.log*
 .devserver.log
 
+# personal interview/resume prep, not for the public repo
+PROJECT_DOSSIER.md
+
 # env files (can opt-in for committing if needed)
 .env*
 !.env.local.example
