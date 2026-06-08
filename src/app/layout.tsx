@@ -12,8 +12,8 @@ export const metadata: Metadata = {
   title: 'ClipSync - Multi-Device Async Clipboard Manager',
   description: 'Sync text, code snippets, screenshots, and PDFs across devices in real time',
   robots: {
-    index: false,
-    follow: false,
+    index: true,
+    follow: true,
   },
 }
 
@@ -24,10 +24,6 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        <meta name="robots" content="noindex, nofollow" />
-        <meta name="X-Robots-Tag" content="noindex, nofollow" />
-      </head>
       <body className={inter.className}>
         <ThemeProvider
           attribute="class"

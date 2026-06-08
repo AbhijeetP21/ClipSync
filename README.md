@@ -1,478 +1,167 @@
-# ClipSync - Multi-Device Async Clipboard Manager
+# ClipSync - Multi-Device Clipboard Manager
 
-A full-stack, self-hostable clipboard manager web app that syncs text, code snippets, screenshots, and PDFs across devices in real time.
+A full-stack, self-hostable clipboard manager that syncs text, code snippets, images, and PDFs across devices in real time. Each user gets their own private clipboard, isolated by Postgres Row Level Security.
+
+Live demo: https://clip-sync-ochre.vercel.app
 
 ## Features
 
-- **Real-time Sync**: Instantly sync clips across all devices using Supabase Realtime
-- **Multi-Type Support**: Text, code snippets, images, and PDFs
-- **Smart Input**: Auto-detects code vs text, drag-and-drop file uploads
-- **Organized Storage**: Date-wise grouping for clipboard, saved pages for organization
-- **Syntax Highlighting**: Beautiful code display with language detection
-- **Single-User Lock**: Private instance protection
-- **Light/Dark Theme**: System preference with manual override
-- **Responsive Design**: Mobile-first, works on all screen sizes
-- **Secure**: Row Level Security, encrypted storage, no public APIs
+- Real-time sync across devices using Supabase Realtime
+- Multi-type clips: plain text, code snippets, images, and PDFs
+- File uploads to private storage, with in-app image and PDF previews and downloads via short-lived signed URLs
+- Saved pages: organize clips into named pages, and save any clip to a page (the file is copied so the original and the saved note are independent)
+- Trash bin for saved notes: deleting a note moves it to trash for 7 days, where it can be restored or permanently deleted, after which it is purged automatically. Files are preserved while in trash
+- Drag-and-drop reordering of saved notes
+- Multi-user: anyone can sign in and gets their own private clipboard
+- Authentication via passwordless magic link and Google OAuth
+- Light, dark, and system themes
+- Keyboard shortcut: Ctrl+Enter (Cmd+Enter on macOS) to submit a clip
+- Responsive, mobile-first layout
 
 ## Tech Stack
 
-- **Frontend**: Next.js 14 (App Router), TypeScript, React
-- **Styling**: Tailwind CSS, shadcn/ui
-- **State Management**: Zustand
-- **Rich Text**: Tiptap editor with syntax highlighting
-- **Backend**: Supabase (Auth, Database, Storage, Realtime)
-- **Deployment**: Vercel (serverless)
-- **File Uploads**: Supabase Storage with private buckets
-- **Drag & Drop**: @dnd-kit/core for reordering
+- Framework: Next.js 16 (App Router), React 19, TypeScript
+- Styling: Tailwind CSS v4 with shadcn/ui components
+- State management: Zustand
+- Backend: Supabase (Auth, Postgres, Storage, Realtime)
+- Drag and drop: dnd-kit
+- Notifications: Sonner
+- Deployment: Vercel
+
+## How It Works
+
+- Authentication is handled by Supabase Auth. Every clip, page, and note row carries a `user_id`, and Row Level Security policies (`auth.uid() = user_id`) ensure each user can only read and write their own data.
+- Files are stored in a private Supabase Storage bucket named `clips-files`, namespaced per user. They are never public; the app generates short-lived signed URLs for previews and downloads.
+- Realtime subscriptions keep clips and saved notes in sync across a user's devices. Signing in with the same account on another device shows the same clipboard.
+
+## Prerequisites
+
+- Node.js 20 or newer
+- A Supabase project
+- npm
 
 ## Quick Start
 
-### Prerequisites
+### 1. Clone and install
 
-- Node.js 18+
-- npm or yarn
-- Supabase project
-
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/your-username/clipsync.git
-   cd clipsync
-   ```
-
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
-
-3. **Set up Supabase**
-   - Create a new project at [Supabase](https://supabase.com)
-   - Copy your project URL and API keys
-
-4. **Environment Variables**
-   Create a `.env.local` file:
-   ```bash
-   cp .env.local.example .env.local
-   ```
-   
-   Fill in your Supabase credentials:
-   ```env
-   NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-   SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
-   ```
-
-5. **Database Setup**
-   - Run the migrations in Supabase SQL Editor:
-     ```sql
-     -- Run the contents of supabase/migrations/001_initial_schema.sql
-     -- Run the contents of supabase/migrations/002_cleanup_function.sql
-     ```
-
-6. **Storage Setup**
-   - Go to Storage → Settings in Supabase Dashboard
-   - Create a new bucket named `clips-files` (set to private)
-   - Add the following policy:
-     ```sql
-     CREATE POLICY "Users can upload files" ON storage.objects
-     FOR INSERT WITH CHECK (bucket_id = 'clips-files' AND auth.uid() = owner);
-     
-     CREATE POLICY "Users can read their files" ON storage.objects
-     FOR SELECT USING (bucket_id = 'clips-files' AND auth.uid() = owner);
-     
-     CREATE POLICY "Users can delete their files" ON storage.objects
-     FOR DELETE USING (bucket_id = 'clips-files' AND auth.uid() = owner);
-     ```
-
-7. **Enable Realtime**
-   - Go to Database → Replication in Supabase Dashboard
-   - Enable replication for `clips` and `saved_notes` tables
-
-8. **Set up pg_cron for cleanup**
-   - Go to Extensions in Supabase Dashboard
-   - Enable `pg_cron` extension
-   - Create a cron job to run daily cleanup:
-     ```sql
-     SELECT cron.schedule(
-       'cleanup-old-clips',
-       '0 2 * * *', -- Daily at 2 AM UTC
-       'SELECT cleanup_old_files();'
-     );
-     ```
-
-9. **Start development server**
-   ```bash
-   npm run dev
-   ```
-
-10. **Open your browser**
-    Visit `http://localhost:3000` and sign up with your email
-
-## Authentication
-
-ClipSync uses Supabase Auth with:
-- **Magic Link**: Email-based passwordless authentication
-- **Google OAuth**: Optional Google sign-in
-- **Single-User Lock**: After first signup, the instance becomes private
-
-## Detailed Supabase Setup
-
-### Step 1: Create Supabase Project
-
-1. Go to [Supabase](https://supabase.com) and sign up
-2. Click "New Project"
-3. Fill in project details:
-   - **Name**: `clipsync`
-   - **Database Password**: Choose a strong password
-   - **Region**: Select closest to your users
-4. Wait for project creation (2-5 minutes)
-
-### Step 2: Get API Credentials
-
-1. Go to your project settings
-2. Navigate to **Settings → API**
-3. Copy these values:
-   - **Project URL**: `https://your-project.supabase.co`
-   - **anon public key**: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
-   - **service_role key**: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
-
-### Step 3: Configure Authentication
-
-1. Go to **Authentication → Settings**
-2. Set **Site URL** to `http://localhost:3000` (for development)
-3. Add redirect URLs:
-   - `http://localhost:3000/login`
-   - `http://localhost:3000/`
-4. Enable **Email** provider
-5. (Optional) Configure Google OAuth:
-   - Go to **External OAuth Providers**
-   - Enable Google
-   - Add your Google OAuth credentials
-
-### Step 4: Set Up Database
-
-1. Go to **SQL Editor**
-2. Run the migration from `supabase/migrations/001_initial_schema.sql`
-3. Run the cleanup function from `supabase/migrations/002_cleanup_function.sql`
-
-### Step 5: Configure Storage
-
-1. Go to **Storage → Settings**
-2. Click **Create bucket**
-3. Name: `clips-files`
-4. Set to **Private**
-5. Go to **Storage → Policies**
-6. Create these policies:
-
-**Upload Policy:**
-```sql
-CREATE POLICY "Users can upload files" ON storage.objects
-FOR INSERT WITH CHECK (bucket_id = 'clips-files' AND auth.uid() = owner);
+```bash
+git clone https://github.com/AbhijeetP21/ClipSync.git
+cd ClipSync
+npm install
 ```
 
-**Read Policy:**
-```sql
-CREATE POLICY "Users can read their files" ON storage.objects
-FOR SELECT USING (bucket_id = 'clips-files' AND auth.uid() = owner);
+### 2. Configure environment variables
+
+Copy the example file and fill in your Supabase credentials:
+
+```bash
+cp .env.local.example .env.local
 ```
 
-**Delete Policy:**
-```sql
-CREATE POLICY "Users can delete their files" ON storage.objects
-FOR DELETE USING (bucket_id = 'clips-files' AND auth.uid() = owner);
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_your_key
 ```
 
-### Step 6: Enable Realtime
+Notes:
+- The browser key is the new Supabase publishable key (`sb_publishable_...`). The app also accepts the legacy `NEXT_PUBLIC_SUPABASE_ANON_KEY` as a fallback.
+- The service role key is not used by the application code, so you do not need to set it.
 
-1. Go to **Database → Replication**
-2. Enable replication for:
-   - `clips` table
-   - `saved_notes` table
-3. Set **Max replication lag** to 10 seconds
+### 3. Set up the database
 
-### Step 7: Set Up pg_cron
+In the Supabase dashboard, open the SQL Editor and run the migrations in order:
 
-1. Go to **Database → Extensions**
-2. Find and enable `pg_cron`
-3. Go to **Database → SQL Editor**
-4. Run the cleanup job setup:
+1. `supabase/migrations/001_initial_schema.sql` - creates the `config`, `clips`, `saved_pages`, and `saved_notes` tables with Row Level Security and policies
+2. `supabase/migrations/002_cleanup_function.sql` - creates optional cleanup helper functions
+3. `supabase/migrations/003_trash_bin.sql` - adds the `deleted_at` column used by the saved-notes trash bin
+
+### 4. Set up storage
+
+1. Go to Storage and create a new bucket named `clips-files`. Keep it private.
+2. In the SQL Editor, add the access policies:
+
 ```sql
-SELECT cron.schedule(
-  'cleanup-old-clips',
-  '0 2 * * *', -- Daily at 2 AM UTC
-  'SELECT cleanup_old_files();'
-);
+create policy "Users can upload files"
+on storage.objects for insert
+with check (bucket_id = 'clips-files' and auth.uid() = owner);
+
+create policy "Users can read their files"
+on storage.objects for select
+using (bucket_id = 'clips-files' and auth.uid() = owner);
+
+create policy "Users can delete their files"
+on storage.objects for delete
+using (bucket_id = 'clips-files' and auth.uid() = owner);
 ```
 
-### Step 8: Configure Row Level Security
+### 5. Enable Realtime
 
-All tables should have RLS enabled with appropriate policies. The migration files include these policies, but verify:
+In Database, open Publications and enable the `supabase_realtime` publication for the `clips` and `saved_notes` tables.
 
-1. **clips table**: Only owner can access
-2. **saved_pages table**: Only owner can access
-3. **saved_notes table**: Only owner can access
-4. **config table**: Only authenticated users can read
+### 6. Configure authentication
 
-### Step 9: Test Your Setup
+1. In Authentication, under URL Configuration, set the Site URL to `http://localhost:3000` for local development and add `http://localhost:3000/**` to the redirect allow list.
+2. Enable the Email provider for magic-link sign-in.
+3. To enable Google sign-in, configure the Google provider with a Client ID and Client Secret from the Google Cloud Console, and add the Supabase callback URL (`https://your-project.supabase.co/auth/v1/callback`) to the authorized redirect URIs in Google Cloud Console.
 
-1. Set environment variables in your `.env.local`
-2. Run `npm run dev`
-3. Visit `http://localhost:3000`
-4. Try signing up with your email
-5. Test file uploads and real-time sync
+By default, Supabase's built-in email sender is heavily rate limited and intended only for testing. For reliable magic-link delivery to any recipient, configure custom SMTP (for example, Resend) with a verified sending domain.
 
-## Vercel Deployment Setup
+### 7. Run the development server
 
-### Step 1: Prepare for Production
+```bash
+npm run dev
+```
 
-1. **Update redirect URLs** in Supabase:
-   - Replace `http://localhost:3000` with your Vercel URL
-   - Example: `https://clipsync.vercel.app`
+Open http://localhost:3000.
 
-2. **Create production environment variables**:
-   ```env
-   NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_production_anon_key
-   SUPABASE_SERVICE_ROLE_KEY=your_production_service_role_key
-   ```
+## Project Structure
 
-### Step 2: Deploy to Vercel
+```
+ClipSync/
+├── src/
+│   ├── app/                 # Next.js App Router routes
+│   │   ├── login/           # Sign-in page
+│   │   ├── auth/callback/   # OAuth and magic-link callback
+│   │   ├── clipboard/       # Main clipboard view
+│   │   └── saved/           # Saved pages and per-page view
+│   ├── components/          # UI components
+│   │   └── ui/              # shadcn/ui primitives
+│   ├── hooks/               # Data hooks (useAuth, useClips, useSavedPages)
+│   ├── lib/                 # Supabase client, Zustand store, realtime helpers, utils
+│   └── types/               # TypeScript type definitions
+├── supabase/migrations/     # SQL migrations
+└── public/                  # Static assets
+```
 
-1. **Push to GitHub**:
-   ```bash
-   git init
-   git add .
-   git commit -m "Initial commit"
-   git branch -M main
-   git remote add origin https://github.com/your-username/clipsync.git
-   git push -u origin main
-   ```
+## Available Scripts
 
-2. **Import to Vercel**:
-   - Go to [Vercel Dashboard](https://vercel.com)
-   - Click **New Project**
-   - Import your GitHub repository
-   - Configure project settings:
-     - **Framework Preset**: Next.js
-     - **Root Directory**: `/` (root)
-     - **Build Command**: `npm run build`
-     - **Output Directory**: `.next`
-     - **Development Command**: `npm run dev`
-
-3. **Set Environment Variables**:
-   - Go to **Settings → Environment Variables**
-   - Add the three Supabase environment variables
-   - Set **Environment** to **Production**
-
-4. **Deploy**:
-   - Click **Deploy**
-   - Wait for deployment to complete
-   - Note your production URL
-
-### Step 3: Post-Deployment Configuration
-
-1. **Update Supabase settings**:
-   - Go to **Authentication → Settings**
-   - Update **Site URL** to your Vercel URL
-   - Update redirect URLs
-
-2. **Run migrations**:
-   - Go to **SQL Editor** in Supabase
-   - Run the migration files if not already done
-
-3. **Test production deployment**:
-   - Visit your Vercel URL
-   - Test authentication
-   - Test file uploads
-   - Test real-time sync
-
-### Step 4: Monitoring and Maintenance
-
-1. **Monitor usage**:
-   - Check Supabase dashboard for API usage
-   - Monitor storage usage
-   - Check Vercel logs for errors
-
-2. **Set up alerts**:
-   - Configure Supabase usage alerts
-   - Set up Vercel deployment notifications
-
-3. **Regular maintenance**:
-   - Monitor pg_cron job execution
-   - Check for failed file uploads
-   - Review security settings periodically
-
-### Troubleshooting Deployment
-
-**Environment Variables Not Set**:
-- Verify all three Supabase variables are set in Vercel
-- Check that variables are set to **Production** environment
-- Redeploy after making changes
-
-**Authentication Fails**:
-- Verify redirect URLs match your Vercel domain
-- Check that Supabase project URL is correct
-- Ensure anon key is correct
-
-**File Uploads Fail**:
-- Verify storage bucket policies are correct
-- Check that bucket is set to private
-- Ensure file size limits are appropriate
-
-**Real-time Sync Not Working**:
-- Verify realtime is enabled for tables
-- Check that RLS policies allow realtime subscriptions
-- Ensure Supabase plan supports realtime features
-
-**Build Errors**:
-- Check that all dependencies are in package.json
-- Verify TypeScript configuration
-- Check for any hardcoded localhost URLs
-
-## Database Schema
-
-### Tables
-
-- **`config`**: Single-user lock configuration
-- **`clips`**: Clipboard entries with 7-day auto-expiry
-- **`saved_pages`**: User-created pages for organization
-- **`saved_notes`**: Notes within saved pages
-
-All tables use Row Level Security (RLS) to ensure data isolation.
-
-## File Storage
-
-- Files are stored in Supabase Storage bucket `clips-files`
-- Bucket is private (not public)
-- Files are served via signed URLs (1-hour expiry)
-- Automatic cleanup of old files via pg_cron
-
-## Security Features
-
-- **Row Level Security**: All database tables protected
-- **Private Storage**: No public file access
-- **Signed URLs**: Temporary access to files
-- **Content Security Policy**: Prevents XSS attacks
-- **Noindex Headers**: Prevents search engine indexing
-- **Single-User Lock**: Private instance protection
+- `npm run dev` - start the development server
+- `npm run build` - build for production
+- `npm run start` - start the production server
+- `npm run lint` - run ESLint
+- `npm run typecheck` - run the TypeScript compiler without emitting
 
 ## Deployment to Vercel
 
-1. **Push to GitHub**
-   ```bash
-   git init
-   git add .
-   git commit -m "Initial commit"
-   git branch -M main
-   git remote add origin https://github.com/your-username/clipsync.git
-   git push -u origin main
-   ```
+1. Push the repository to GitHub and import it into Vercel. The Next.js preset is detected automatically.
+2. Add the environment variables `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in the Vercel project settings.
+3. Deploy, then note the production URL.
+4. In Supabase, under Authentication and URL Configuration, set the Site URL to your Vercel URL and add `https://your-app.vercel.app/**` to the redirect allow list. The Google redirect URI stays the Supabase callback and does not change.
 
-2. **Deploy to Vercel**
-   - Go to [Vercel](https://vercel.com) and import your GitHub repository
-   - Set environment variables in Vercel Dashboard
-   - Deploy!
+After the first import, every push to the production branch triggers an automatic deployment.
 
-3. **Post-deployment setup**
-   - Run database migrations in your Supabase project
-   - Set up storage bucket and policies
-   - Enable realtime for tables
-   - Configure pg_cron cleanup job
+## Security Notes
 
-## Development
-
-### Available Scripts
-
-- `npm run dev`: Start development server
-- `npm run build`: Build for production
-- `npm run start`: Start production server
-- `npm run lint`: Run ESLint
-- `npm run typecheck`: Run TypeScript check
-
-### Project Structure
-
-```
-clipsync/
-├── app/                    # Next.js App Router pages
-│   ├── login/             # Authentication page
-│   ├── clipboard/         # Main clipboard interface
-│   ├── saved/             # Saved pages management
-│   └── saved/[pageId]/    # Individual saved pages
-├── components/            # Reusable UI components
-├── hooks/                # Custom React hooks
-├── lib/                  # Core logic and utilities
-├── types/                # TypeScript type definitions
-├── supabase/             # Database migrations
-└── public/               # Static assets
-```
-
-### Adding New Features
-
-1. Follow the existing patterns for state management (Zustand)
-2. Use shadcn/ui components for consistent UI
-3. Add TypeScript types to `/types/index.ts`
-4. Write database migrations for schema changes
-5. Update RLS policies for new tables
-6. Add tests for critical functionality
-
-## Troubleshooting
-
-### Common Issues
-
-**Authentication fails**
-- Check Supabase Auth settings
-- Verify email redirect URLs
-- Ensure single-user lock is configured correctly
-
-**Files not uploading**
-- Verify storage bucket exists and is private
-- Check storage policies are correctly set
-- Ensure file size is under 10MB limit
-
-**Real-time sync not working**
-- Verify realtime is enabled for tables
-- Check Supabase project plan supports realtime
-- Ensure RLS policies allow realtime subscriptions
-
-**Build errors**
-- Check all environment variables are set
-- Verify Supabase client configuration
-- Ensure all dependencies are installed
-
-### Getting Help
-
-- Check the [Supabase documentation](https://supabase.com/docs)
-- Review [Next.js documentation](https://nextjs.org/docs)
-- File issues on the GitHub repository
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+- Row Level Security is enabled on all tables, so users can only access their own data.
+- The storage bucket is private. Files are served only through short-lived signed URLs.
+- A Content Security Policy and other security headers are set in `next.config.ts`.
 
 ## License
 
-This project is licensed under the **Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)**.
+This project is licensed under the Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0) license.
 
-**Key terms:**
-- ✅ **Free for individuals**: You can use this project freely for personal, educational, or non-commercial purposes
-- ✅ **Attribution required**: You must give appropriate credit and indicate if changes were made
-- ❌ **Commercial use prohibited**: You cannot use this project for any commercial purpose or generate revenue from it
-- ❌ **No commercial licensing**: If you need to use this project commercially, please contact the author for a commercial license
+- Free for personal, educational, and other non-commercial use
+- Attribution required
+- Commercial use is not permitted without a separate license from the author
 
-For the full legal code and more details, see the [LICENSE](LICENSE) file or visit [CC BY-NC 4.0](http://creativecommons.org/licenses/by-nc/4.0/).
-
-## Support
-
-For support and questions:
-- Create an issue on GitHub
-- Check the documentation
-- Review Supabase and Next.js docs
-
----
-
-**ClipSync** - Keep your clipboard organized across all devices.
+See the [LICENSE](LICENSE) file or https://creativecommons.org/licenses/by-nc/4.0/ for the full terms.
