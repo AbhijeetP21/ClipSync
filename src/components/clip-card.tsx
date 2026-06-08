@@ -1,7 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { supabase } from '@/lib/supabase'
+import { useStore } from '@/lib/store'
 import { useToast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
@@ -17,6 +20,19 @@ export function ClipCard({ clip, onDelete, onSave, onToggleCollapse }: ClipCardP
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [previewError, setPreviewError] = useState(false)
   const { toast } = useToast()
+
+  // Resolve the active theme so code highlighting matches light or dark mode.
+  const theme = useStore((s) => s.theme)
+  const [isDark, setIsDark] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    setIsDark(theme === 'system' ? mq.matches : theme === 'dark')
+    if (theme === 'system') {
+      const handler = () => setIsDark(mq.matches)
+      mq.addEventListener('change', handler)
+      return () => mq.removeEventListener('change', handler)
+    }
+  }, [theme])
 
   const isFile = clip.type === 'image' || clip.type === 'pdf'
 
@@ -155,9 +171,18 @@ export function ClipCard({ clip, onDelete, onSave, onToggleCollapse }: ClipCardP
                 {clip.language}
               </Badge>
             )}
-            <pre className="text-sm bg-muted p-3 rounded-md overflow-auto max-h-60">
-              <code>{formatContent(clip.content || '')}</code>
-            </pre>
+            <SyntaxHighlighter
+              language={clip.language || 'text'}
+              style={isDark ? oneDark : oneLight}
+              customStyle={{
+                margin: 0,
+                borderRadius: '0.5rem',
+                maxHeight: '15rem',
+                fontSize: '0.8125rem',
+              }}
+            >
+              {formatContent(clip.content || '')}
+            </SyntaxHighlighter>
             {clip.content && clip.content.length > 200 && (
               <Button
                 variant="ghost"
