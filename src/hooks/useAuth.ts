@@ -120,53 +120,10 @@ export const useAuth = () => {
     return true
   }
 
-  const checkSingleUserLock = async (): Promise<boolean> => {
-    const { data, error } = await supabase
-      .from('config')
-      .select('value')
-      .eq('key', 'allowed_email')
-      .single()
-
-    if (error && error.code !== 'PGRST116') {
-      console.error('Error checking single user lock:', error)
-      return false
-    }
-
-    if (data) {
-      const { data: currentUser } = await supabase.auth.getUser()
-      if (currentUser.user?.email !== data.value) {
-        return false
-      }
-    }
-
-    return true
-  }
-
-  const getCurrentUser = async () => {
-    const { data } = await supabase.auth.getUser()
-    return { data: data.user }
-  }
-
-  const setSingleUserLock = async (email: string): Promise<boolean> => {
-    const { error } = await supabase
-      .from('config')
-      .upsert({ key: 'allowed_email', value: email }, { onConflict: 'key' })
-
-    if (error) {
-      console.error('Error setting single user lock:', error)
-      return false
-    }
-
-    return true
-  }
-
   return {
     ...auth,
     signInWithMagicLink,
     signInWithGoogle,
     signOut,
-    checkSingleUserLock,
-    setSingleUserLock,
-    getCurrentUser,
   }
 }
