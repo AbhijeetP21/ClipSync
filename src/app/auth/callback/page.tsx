@@ -7,54 +7,31 @@ import { useToast } from '@/hooks/use-toast'
 
 export default function AuthCallbackPage() {
   const router = useRouter()
-  const auth = useAuth()
+  const { isAuthenticated, isLoading } = useAuth()
   const { toast } = useToast()
 
   useEffect(() => {
-    // Handle OAuth callback
-    const handleAuthCallback = async () => {
-      const params = new URLSearchParams(window.location.search)
-      const error = params.get('error')
-      const error_description = params.get('error_description')
+    // Handle OAuth / magic-link callback. Multi-user: each authenticated user
+    // gets their own clipboard (isolated by Row Level Security on user_id).
+    const params = new URLSearchParams(window.location.search)
+    const error = params.get('error')
+    const error_description = params.get('error_description')
 
-      if (error) {
-        toast({
-          title: 'Authentication Error',
-          description: error_description || 'Failed to authenticate',
-          variant: 'destructive',
-        })
-        router.push('/login')
-        return
-      }
-
-      // Check if user is authenticated
-      if (auth.isAuthenticated) {
-        // Check single user lock
-        const isAllowed = await auth.checkSingleUserLock()
-        if (!isAllowed) {
-          toast({
-            title: 'Access Denied',
-            description: 'This instance is private.',
-            variant: 'destructive',
-          })
-          router.push('/login')
-          return
-        }
-
-        // Set single user lock if this is the first user
-        const { data: currentUser } = await auth.getCurrentUser()
-        if (currentUser) {
-          await auth.setSingleUserLock(currentUser.email!)
-        }
-
-        router.push('/clipboard')
-      } else {
-        router.push('/login')
-      }
+    if (error) {
+      toast({
+        title: 'Authentication Error',
+        description: error_description || 'Failed to authenticate',
+        variant: 'destructive',
+      })
+      router.push('/login')
+      return
     }
 
-    handleAuthCallback()
-  }, [auth, router, toast])
+    // Wait until the session has resolved before deciding where to send the user.
+    if (isLoading) return
+
+    router.push(isAuthenticated ? '/clipboard' : '/login')
+  }, [isAuthenticated, isLoading, router, toast])
 
   return (
     <div className="min-h-screen flex items-center justify-center">

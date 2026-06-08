@@ -31,6 +31,7 @@ export const useSavedPages = () => {
         .from('saved_notes')
         .select('*')
         .eq('user_id', auth.user!.id)
+        .is('deleted_at', null)
         .order('position', { ascending: true })
 
       if (notesError) {
@@ -134,29 +135,96 @@ export const useSavedPages = () => {
     return data
   }
 
+  // Soft-delete: move the note to the trash (kept for 7 days). The storage file
+  // is intentionally preserved so the note can be restored intact.
   const deleteNote = async (id: string) => {
-    const note = savedPages.notes.find(n => n.id === id)
-    if (!note) return false
-
-    // Delete file from storage if it exists
-    if (note.file_path) {
-      await supabase.storage
-        .from('clips-files')
-        .remove([note.file_path])
-    }
-
     const { error } = await supabase
       .from('saved_notes')
-      .delete()
+      .update({ deleted_at: new Date().toISOString() })
       .eq('id', id)
 
     if (error) {
-      console.error('Error deleting note:', error)
+      console.error('Error trashing note:', error)
       return false
     }
 
     removeSavedNote(id)
     return true
+  }
+
+  const TRASH_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
+
+  // Restore a trashed note back into its page.
+  const restoreNote = async (id: string) => {
+    const { data, error } = await supabase
+      .from('saved_notes')
+      .update({ deleted_at: null })
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error restoring note:', error)
+      return false
+    }
+
+    addSavedNote(data as SavedNote)
+    return true
+  }
+
+  // Permanently remove a trashed note and its file.
+  const permanentlyDeleteNote = async (id: string, filePath?: string | null) => {
+    if (filePath) {
+      await supabase.storage.from('clips-files').remove([filePath])
+    }
+    const { error } = await supabase.from('saved_notes').delete().eq('id', id)
+    if (error) {
+      console.error('Error deleting note permanently:', error)
+      return false
+    }
+    return true
+  }
+
+  // Delete any trashed notes (and their files) older than the retention window.
+  const purgeExpiredTrash = async (pageId: string) => {
+    const cutoff = new Date(Date.now() - TRASH_RETENTION_MS).toISOString()
+    const { data: expired } = await supabase
+      .from('saved_notes')
+      .select('id, file_path')
+      .eq('page_id', pageId)
+      .not('deleted_at', 'is', null)
+      .lt('deleted_at', cutoff)
+
+    if (expired && expired.length > 0) {
+      const paths = expired
+        .map((e) => e.file_path)
+        .filter((p): p is string => !!p)
+      if (paths.length > 0) {
+        await supabase.storage.from('clips-files').remove(paths)
+      }
+      await supabase.from('saved_notes').delete().in(
+        'id',
+        expired.map((e) => e.id)
+      )
+    }
+  }
+
+  // Fetch the (non-expired) trashed notes for a page.
+  const getTrashedNotes = async (pageId: string): Promise<SavedNote[]> => {
+    const cutoff = new Date(Date.now() - TRASH_RETENTION_MS).toISOString()
+    const { data, error } = await supabase
+      .from('saved_notes')
+      .select('*')
+      .eq('page_id', pageId)
+      .not('deleted_at', 'is', null)
+      .gte('deleted_at', cutoff)
+      .order('deleted_at', { ascending: false })
+
+    if (error) {
+      console.error('Error loading trash:', error)
+      return []
+    }
+    return (data ?? []) as SavedNote[]
   }
 
   const updateNote = async (id: string, updates: Partial<SavedNote>) => {
@@ -175,7 +243,10 @@ export const useSavedPages = () => {
   }
 
   const reorderNotes = async (pageId: string, noteId: string, newPosition: number) => {
-    const notes = savedPages.notes.filter(n => n.page_id === pageId)
+    // Sort to match the order shown in the UI (getNotesByPage sorts by position).
+    const notes = savedPages.notes
+      .filter(n => n.page_id === pageId)
+      .sort((a, b) => a.position - b.position)
     const noteIndex = notes.findIndex(n => n.id === noteId)
     
     if (noteIndex === -1) return false
@@ -184,25 +255,28 @@ export const useSavedPages = () => {
     const [movedNote] = updatedNotes.splice(noteIndex, 1)
     updatedNotes.splice(newPosition, 0, movedNote)
 
-    // Update positions in database
+    // Update positions in the database. Use individual UPDATEs (not upsert):
+    // upsert would attempt an INSERT of rows missing NOT-NULL columns
+    // (user_id, type) before resolving the conflict, which fails.
     const updates = updatedNotes.map((note, index) => ({
       id: note.id,
       position: index,
     }))
 
-    const { error } = await supabase
-      .from('saved_notes')
-      .upsert(updates, { onConflict: 'id' })
+    const results = await Promise.all(
+      updates.map((u) =>
+        supabase.from('saved_notes').update({ position: u.position }).eq('id', u.id)
+      )
+    )
 
-    if (error) {
-      console.error('Error reordering notes:', error)
+    const failed = results.find((r) => r.error)
+    if (failed?.error) {
+      console.error('Error reordering notes:', failed.error)
       return false
     }
 
     // Update local state
-    updatedNotes.forEach((note, index) => {
-      updateSavedNote(note.id, { position: index })
-    })
+    updates.forEach((u) => updateSavedNote(u.id, { position: u.position }))
 
     return true
   }
@@ -228,6 +302,10 @@ export const useSavedPages = () => {
     updatePage,
     createNote,
     deleteNote,
+    restoreNote,
+    permanentlyDeleteNote,
+    purgeExpiredTrash,
+    getTrashedNotes,
     updateNote,
     reorderNotes,
     getNotesByPage,
