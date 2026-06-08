@@ -150,7 +150,7 @@ export const useAuth = () => {
   const setSingleUserLock = async (email: string): Promise<boolean> => {
     const { error } = await supabase
       .from('config')
-      .insert({ key: 'allowed_email', value: email })
+      .upsert({ key: 'allowed_email', value: email }, { onConflict: 'key' })
 
     if (error) {
       console.error('Error setting single user lock:', error)

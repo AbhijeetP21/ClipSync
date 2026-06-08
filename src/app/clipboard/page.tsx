@@ -2,20 +2,28 @@
 
 import { useState } from 'react'
 import { useClips } from '@/hooks/useClips'
-import { useAuth } from '@/hooks/useAuth'
+import { useSavedPages } from '@/hooks/useSavedPages'
 import { ClipInput } from '@/components/clip-input'
 import { ClipCard } from '@/components/clip-card'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import { Icons } from '@/components/icons'
 
 export default function ClipboardPage() {
-  const { clips, getClipsByDate, createClip, deleteClip, toggleClipCollapse, saveClipToPage } = useClips()
-  const { signOut } = useAuth()
+  const { getClipsByDate, createClip, deleteClip, toggleClipCollapse, saveClipToPage } = useClips()
+  const { pages } = useSavedPages()
   const { toast } = useToast()
   const [isInputExpanded, setIsInputExpanded] = useState(false)
+  const [saveClipId, setSaveClipId] = useState<string | null>(null)
 
   const handleAddClip = async (clipData: any) => {
     const result = await createClip(clipData)
@@ -54,13 +62,26 @@ export default function ClipboardPage() {
     await toggleClipCollapse(id)
   }
 
-  const handleSaveClip = async (clipId: string) => {
-    // For now, just show a toast. In a full implementation, this would open a modal
-    // to select which saved page to save to
-    toast({
-      title: 'Save Clip',
-      description: 'This would open a modal to select which saved page to save to.',
-    })
+  const handleSaveClip = (clipId: string) => {
+    setSaveClipId(clipId)
+  }
+
+  const handleConfirmSave = async (pageId: string) => {
+    if (!saveClipId) return
+    const result = await saveClipToPage(saveClipId, pageId)
+    if (result) {
+      toast({
+        title: 'Saved',
+        description: 'Clip saved to your page.',
+      })
+    } else {
+      toast({
+        title: 'Error',
+        description: 'Failed to save clip. Please try again.',
+        variant: 'destructive',
+      })
+    }
+    setSaveClipId(null)
   }
 
   const formatDate = (dateString: string) => {
@@ -74,10 +95,10 @@ export default function ClipboardPage() {
     } else if (date.toDateString() === yesterday.toDateString()) {
       return 'Yesterday'
     } else {
-      return date.toLocaleDateString('en-US', { 
-        month: 'long', 
-        day: 'numeric', 
-        year: 'numeric' 
+      return date.toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
       })
     }
   }
@@ -143,6 +164,35 @@ export default function ClipboardPage() {
           )}
         </div>
       </ScrollArea>
+
+      {/* Save-to-page picker */}
+      <Dialog open={saveClipId !== null} onOpenChange={(open) => !open && setSaveClipId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save to page</DialogTitle>
+            <DialogDescription>Choose a saved page for this clip.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            {pages.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                You have no saved pages yet. Create one on the Saved tab first.
+              </p>
+            ) : (
+              pages.map((page) => (
+                <Button
+                  key={page.id}
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={() => handleConfirmSave(page.id)}
+                >
+                  <span className="mr-2 text-lg">{page.emoji}</span>
+                  {page.name}
+                </Button>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
