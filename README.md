@@ -2,7 +2,7 @@
 
 A full-stack, self-hostable clipboard manager that syncs text, code snippets, images, and PDFs across devices in real time. Each user gets their own private clipboard, isolated by Postgres Row Level Security.
 
-Live demo: https://clip-sync-ochre.vercel.app
+Live demo: https://clipsync.abhijeetpachpute.com
 
 ## Features
 
