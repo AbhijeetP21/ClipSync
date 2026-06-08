@@ -5,7 +5,6 @@ import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/toaster'
 import { AuthProvider } from '@/components/auth-provider'
 import { Sidebar } from '@/components/sidebar'
-import { initializeTheme } from '@/lib/store'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -23,9 +22,6 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
-  // Initialize theme on server side
-  initializeTheme()
-
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
