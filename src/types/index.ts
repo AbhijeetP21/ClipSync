@@ -44,6 +44,7 @@ export interface SavedNote {
   collapsed: boolean
   position: number
   created_at: string
+  deleted_at?: string | null
 }
 
 // Config types
@@ -92,9 +93,9 @@ export interface SavedPagesState {
 
 // UI component types
 export interface ClipCardProps {
-  clip: Clip
+  clip: Clip | SavedNote
   onDelete: (id: string) => void
-  onSave: (clip: Clip) => void
+  onSave: (clip: Clip | SavedNote) => void
   onToggleCollapse: (id: string) => void
 }
 
