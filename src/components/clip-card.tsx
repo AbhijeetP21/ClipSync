@@ -1,50 +1,78 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Icons } from '@/components/icons'
 import { ClipCardProps } from '@/types'
 import { formatDistanceToNow } from 'date-fns'
 
+const BUCKET = 'clips-files'
+
 export function ClipCard({ clip, onDelete, onSave, onToggleCollapse }: ClipCardProps) {
   const [isExpanded, setIsExpanded] = useState(!clip.collapsed)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [previewError, setPreviewError] = useState(false)
   const { toast } = useToast()
+
+  const isFile = clip.type === 'image' || clip.type === 'pdf'
+
+  // Fetch a short-lived signed URL for image/pdf previews.
+  useEffect(() => {
+    let active = true
+    if (isFile && clip.file_path) {
+      setPreviewError(false)
+      supabase.storage
+        .from(BUCKET)
+        .createSignedUrl(clip.file_path, 3600)
+        .then(({ data, error }) => {
+          if (!active) return
+          if (error || !data) {
+            setPreviewError(true)
+          } else {
+            setPreviewUrl(data.signedUrl)
+          }
+        })
+    }
+    return () => {
+      active = false
+    }
+  }, [isFile, clip.file_path])
 
   const handleCopy = async () => {
     try {
       if (clip.type === 'text' || clip.type === 'code') {
         await navigator.clipboard.writeText(clip.content || '')
-        toast({
-          title: 'Copied!',
-          description: 'Content copied to clipboard.',
-        })
-      } else if (clip.type === 'image' || clip.type === 'pdf') {
-        // For files, we would copy the URL or download the file
-        toast({
-          title: 'Copy Image',
-          description: 'This would copy the image URL or download the file.',
-        })
+        toast({ title: 'Copied!', description: 'Content copied to clipboard.' })
+      } else if (previewUrl) {
+        await navigator.clipboard.writeText(previewUrl)
+        toast({ title: 'Link copied', description: 'A temporary file link was copied to your clipboard.' })
       }
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to copy to clipboard.',
-        variant: 'destructive',
-      })
+    } catch {
+      toast({ title: 'Error', description: 'Failed to copy to clipboard.', variant: 'destructive' })
     }
   }
 
-  const handleDownload = () => {
-    if (clip.type === 'image' || clip.type === 'pdf') {
-      // In a real implementation, this would download the file from Supabase Storage
-      toast({
-        title: 'Download',
-        description: 'This would download the file from storage.',
-      })
+  const handleDownload = async () => {
+    if (!clip.file_path) return
+    const { data, error } = await supabase.storage
+      .from(BUCKET)
+      .createSignedUrl(clip.file_path, 60, { download: clip.file_name || true })
+
+    if (error || !data) {
+      toast({ title: 'Download failed', description: error?.message ?? 'File not found.', variant: 'destructive' })
+      return
     }
+
+    const a = document.createElement('a')
+    a.href = data.signedUrl
+    a.download = clip.file_name || ''
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
   }
 
   const handleToggleCollapse = () => {
@@ -84,14 +112,21 @@ export function ClipCard({ clip, onDelete, onSave, onToggleCollapse }: ClipCardP
 
   const formatContent = (content: string) => {
     if (!content) return ''
-    
-    // Limit text length for display
     if (content.length > 200) {
       return isExpanded ? content : content.substring(0, 200) + '...'
     }
-    
     return content
   }
+
+  const renderFileHeader = () => (
+    <div className="flex items-center justify-between">
+      <span className="text-sm text-muted-foreground">{clip.file_name}</span>
+      <Button variant="outline" size="sm" onClick={handleDownload}>
+        <Icons.download className="mr-2 h-4 w-4" />
+        Download
+      </Button>
+    </div>
+  )
 
   const renderContent = () => {
     switch (clip.type) {
@@ -111,7 +146,7 @@ export function ClipCard({ clip, onDelete, onSave, onToggleCollapse }: ClipCardP
             )}
           </div>
         )
-      
+
       case 'code':
         return (
           <div className="space-y-2">
@@ -135,46 +170,52 @@ export function ClipCard({ clip, onDelete, onSave, onToggleCollapse }: ClipCardP
             )}
           </div>
         )
-      
+
       case 'image':
         return (
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">{clip.file_name}</span>
-              <Button variant="outline" size="sm" onClick={handleDownload}>
-                <Icons.download className="mr-2 h-4 w-4" />
-                Download
-              </Button>
-            </div>
-            {/* In a real implementation, this would show a thumbnail of the image */}
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-              <Icons.image className="mx-auto h-12 w-12 text-gray-400" />
-              <p className="text-sm text-muted-foreground mt-2">
-                Image preview would appear here
-              </p>
-            </div>
+            {renderFileHeader()}
+            {previewError ? (
+              <div className="rounded-lg border-2 border-dashed border-gray-300 p-8 text-center text-sm text-muted-foreground">
+                Preview unavailable.
+              </div>
+            ) : previewUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={previewUrl}
+                alt={clip.file_name || 'image'}
+                className="max-h-80 w-auto rounded-md border object-contain"
+              />
+            ) : (
+              <div className="rounded-lg border p-8 text-center text-sm text-muted-foreground">
+                Loading preview…
+              </div>
+            )}
           </div>
         )
-      
+
       case 'pdf':
         return (
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">{clip.file_name}</span>
-              <Button variant="outline" size="sm" onClick={handleDownload}>
-                <Icons.download className="mr-2 h-4 w-4" />
-                Download
-              </Button>
-            </div>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-              <Icons.file className="mx-auto h-12 w-12 text-gray-400" />
-              <p className="text-sm text-muted-foreground mt-2">
-                PDF preview would appear here
-              </p>
-            </div>
+            {renderFileHeader()}
+            {previewError ? (
+              <div className="rounded-lg border-2 border-dashed border-gray-300 p-8 text-center text-sm text-muted-foreground">
+                Preview unavailable.
+              </div>
+            ) : previewUrl ? (
+              <iframe
+                src={previewUrl}
+                title={clip.file_name || 'pdf'}
+                className="h-96 w-full rounded-md border"
+              />
+            ) : (
+              <div className="rounded-lg border p-8 text-center text-sm text-muted-foreground">
+                Loading preview…
+              </div>
+            )}
           </div>
         )
-      
+
       default:
         return null
     }
@@ -194,21 +235,11 @@ export function ClipCard({ clip, onDelete, onSave, onToggleCollapse }: ClipCardP
             </span>
           </div>
           <div className="flex space-x-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleCopy}
-              className="text-xs"
-            >
+            <Button variant="ghost" size="sm" onClick={handleCopy} className="text-xs">
               <Icons.copy className="mr-1 h-3 w-3" />
               Copy
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onSave(clip)}
-              className="text-xs"
-            >
+            <Button variant="ghost" size="sm" onClick={() => onSave(clip)} className="text-xs">
               <Icons.save className="mr-1 h-3 w-3" />
               Save
             </Button>
@@ -224,9 +255,7 @@ export function ClipCard({ clip, onDelete, onSave, onToggleCollapse }: ClipCardP
           </div>
         </div>
       </CardHeader>
-      <CardContent>
-        {renderContent()}
-      </CardContent>
+      <CardContent>{renderContent()}</CardContent>
     </Card>
   )
 }

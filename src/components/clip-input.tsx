@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -162,17 +163,49 @@ export function ClipInput({ onAddClip, isLoading = false }: ClipInputProps) {
         return
       }
 
-      // In a real implementation, this would upload the file to Supabase Storage
-      // For now, we'll just pass the file object
+      setIsUploading(true)
+
+      // Upload the file to the private "clips-files" bucket, namespaced by user id.
+      const { data: userData } = await supabase.auth.getUser()
+      const userId = userData.user?.id
+      if (!userId) {
+        toast({
+          title: 'Not signed in',
+          description: 'Your session expired. Please sign in again.',
+          variant: 'destructive',
+        })
+        setIsUploading(false)
+        return
+      }
+
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const filePath = `${userId}/${Date.now()}-${safeName}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('clips-files')
+        .upload(filePath, file, { contentType: file.type, upsert: false })
+
+      if (uploadError) {
+        toast({
+          title: 'Upload failed',
+          description: uploadError.message,
+          variant: 'destructive',
+        })
+        setIsUploading(false)
+        return
+      }
+
       onAddClip({
         type,
-        file_path: file.name, // This would be the actual storage path
+        file_path: filePath,
         file_name: file.name,
       })
       setFile(null)
+      setType('text')
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
       }
+      setIsUploading(false)
     }
   }
 

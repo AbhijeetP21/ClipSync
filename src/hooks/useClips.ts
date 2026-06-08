@@ -111,6 +111,23 @@ export const useClips = () => {
     const clip = clips.clips.find(c => c.id === clipId)
     if (!clip) return null
 
+    // The clip and the saved note must NOT share the same storage object, or
+    // deleting the clip (which removes its file) would break the saved note.
+    // Give the note an independent copy of the file.
+    let notePath = clip.file_path
+    if (clip.file_path && (clip.type === 'image' || clip.type === 'pdf')) {
+      const safeName = (clip.file_name || 'file').replace(/[^a-zA-Z0-9._-]/g, '_')
+      const dest = `${clip.user_id}/notes/${Date.now()}-${safeName}`
+      const { error: copyError } = await supabase.storage
+        .from('clips-files')
+        .copy(clip.file_path, dest)
+      if (copyError) {
+        console.error('Error copying file for saved note:', copyError)
+      } else {
+        notePath = dest
+      }
+    }
+
     const { data, error } = await supabase
       .from('saved_notes')
       .insert({
@@ -118,7 +135,7 @@ export const useClips = () => {
         page_id: pageId,
         type: clip.type,
         content: clip.content,
-        file_path: clip.file_path,
+        file_path: notePath,
         file_name: clip.file_name,
         language: clip.language,
         collapsed: clip.collapsed,
