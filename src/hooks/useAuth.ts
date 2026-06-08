@@ -142,6 +142,11 @@ export const useAuth = () => {
     return true
   }
 
+  const getCurrentUser = async () => {
+    const { data } = await supabase.auth.getUser()
+    return { data: data.user }
+  }
+
   const setSingleUserLock = async (email: string): Promise<boolean> => {
     const { error } = await supabase
       .from('config')
@@ -162,5 +167,6 @@ export const useAuth = () => {
     signOut,
     checkSingleUserLock,
     setSingleUserLock,
+    getCurrentUser,
   }
 }
