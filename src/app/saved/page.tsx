@@ -75,7 +75,7 @@ export default function SavedPagesPage() {
   return (
     <div className="flex-1 flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b">
+      <div className="flex flex-wrap items-center justify-between gap-2 p-4 pl-16 border-b md:pl-4">
         <div>
           <h1 className="text-2xl font-bold">Saved Pages</h1>
           <p className="text-sm text-muted-foreground">
