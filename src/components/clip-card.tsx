@@ -206,7 +206,7 @@ export function ClipCard({ clip, onDelete, onSave, onToggleCollapse }: ClipCardP
             <Button
               variant="ghost"
               size="sm"
-              onClick={onSave}
+              onClick={() => onSave(clip)}
               className="text-xs"
             >
               <Icons.save className="mr-1 h-3 w-3" />
@@ -215,7 +215,7 @@ export function ClipCard({ clip, onDelete, onSave, onToggleCollapse }: ClipCardP
             <Button
               variant="ghost"
               size="sm"
-              onClick={onDelete}
+              onClick={() => onDelete(clip.id)}
               className="text-xs text-destructive hover:text-destructive/90"
             >
               <Icons.trash className="mr-1 h-3 w-3" />

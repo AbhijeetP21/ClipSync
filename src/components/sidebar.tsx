@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { useStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
@@ -28,6 +28,7 @@ const navigation = [
 
 export function Sidebar() {
   const router = useRouter()
+  const pathname = usePathname()
   const { signOut } = useAuth()
   const { theme } = useStore()
   const [isOpen, setIsOpen] = useState(false)
@@ -67,7 +68,7 @@ export function Sidebar() {
                     href={item.href}
                     className={cn(
                       'flex items-center gap-3 rounded-md p-3 text-sm font-medium hover:bg-accent hover:text-accent-foreground',
-                      router.pathname === item.href && 'bg-accent text-accent-foreground'
+                      pathname === item.href && 'bg-accent text-accent-foreground'
                     )}
                     onClick={() => setIsOpen(false)}
                   >
@@ -105,7 +106,7 @@ export function Sidebar() {
                 href={item.href}
                 className={cn(
                   'flex items-center gap-3 rounded-md p-3 text-sm font-medium hover:bg-accent hover:text-accent-foreground',
-                  router.pathname === item.href && 'bg-accent text-accent-foreground'
+                  pathname === item.href && 'bg-accent text-accent-foreground'
                 )}
               >
                 <item.icon className="h-5 w-5" />

@@ -18,7 +18,7 @@ export const useSavedPages = () => {
       const { data: pages, error: pagesError } = await supabase
         .from('saved_pages')
         .select('*')
-        .eq('user_id', auth.user.id)
+        .eq('user_id', auth.user!.id)
         .order('position', { ascending: true })
 
       if (pagesError) {
@@ -30,7 +30,7 @@ export const useSavedPages = () => {
       const { data: notes, error: notesError } = await supabase
         .from('saved_notes')
         .select('*')
-        .eq('user_id', auth.user.id)
+        .eq('user_id', auth.user!.id)
         .order('position', { ascending: true })
 
       if (notesError) {

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { useStore } from '@/lib/store'
 
@@ -9,13 +9,19 @@ interface AuthProviderProps {
   children: React.ReactNode
 }
 
+// Routes that should render without an authenticated session.
+const PUBLIC_ROUTES = ['/login', '/auth/callback']
+
 export function AuthProvider({ children }: AuthProviderProps) {
   const router = useRouter()
-  const { auth } = useAuth()
+  const pathname = usePathname()
+  const { isLoading, isAuthenticated } = useAuth()
   const { theme } = useStore()
 
+  const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname?.startsWith(route))
+
   useEffect(() => {
-    // Initialize theme
+    // Keep the document theme class in sync with the store.
     if (theme === 'system') {
       const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
       document.documentElement.classList.toggle('dark', systemTheme === 'dark')
@@ -23,18 +29,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
       document.documentElement.classList.toggle('dark', theme === 'dark')
     }
 
-    // Check authentication on mount
-    const checkAuth = async () => {
-      if (!auth.isLoading && !auth.isAuthenticated) {
-        router.push('/login')
-      }
+    // Redirect unauthenticated users away from protected routes.
+    if (!isPublicRoute && !isLoading && !isAuthenticated) {
+      router.push('/login')
     }
+  }, [isLoading, isAuthenticated, isPublicRoute, router, theme])
 
-    checkAuth()
-  }, [auth.isLoading, auth.isAuthenticated, router, theme])
+  // Public routes (login, OAuth callback) always render their own content.
+  if (isPublicRoute) {
+    return <>{children}</>
+  }
 
   // Show loading spinner while checking auth
-  if (auth.isLoading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -46,7 +53,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }
 
   // Only render children if authenticated
-  if (!auth.isAuthenticated) {
+  if (!isAuthenticated) {
     return null
   }
 

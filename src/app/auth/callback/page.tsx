@@ -7,7 +7,7 @@ import { useToast } from '@/hooks/use-toast'
 
 export default function AuthCallbackPage() {
   const router = useRouter()
-  const { auth } = useAuth()
+  const auth = useAuth()
   const { toast } = useToast()
 
   useEffect(() => {
