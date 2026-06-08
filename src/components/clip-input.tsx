@@ -132,7 +132,7 @@ export function ClipInput({ onAddClip, isLoading = false }: ClipInputProps) {
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.SyntheticEvent) => {
     e.preventDefault()
     
     if (type === 'text' || type === 'code') {
@@ -208,6 +208,14 @@ export function ClipInput({ onAddClip, isLoading = false }: ClipInputProps) {
     }
   }
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Ctrl+Enter (or Cmd+Enter on macOS) submits the form.
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault()
+      handleSubmit(e)
+    }
+  }
+
   const clearInput = () => {
     setContent('')
     setFile(null)
@@ -251,6 +259,7 @@ export function ClipInput({ onAddClip, isLoading = false }: ClipInputProps) {
                 placeholder={`Enter your ${type} content...`}
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
+                onKeyDown={handleKeyDown}
                 rows={6}
               />
               {type === 'code' && (
