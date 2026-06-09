@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -35,64 +34,81 @@ const LANGUAGE_OPTIONS = [
   { value: 'xml', label: 'XML' },
 ]
 
+const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg']
+const MAX_FILES: Record<string, number> = { image: 10, pdf: 5 }
+const MAX_SIZE = 10 * 1024 * 1024
+
 interface ClipInputProps {
   onAddClip: (clip: ClipFormData) => void
+  onAddFiles?: (files: File[], type: ClipType) => void | Promise<void>
   isLoading?: boolean
 }
 
-export function ClipInput({ onAddClip, isLoading = false }: ClipInputProps) {
+export function ClipInput({ onAddClip, onAddFiles, isLoading = false }: ClipInputProps) {
   const [type, setType] = useState<ClipType>('text')
   const [content, setContent] = useState('')
   const [language, setLanguage] = useState('javascript')
-  const [file, setFile] = useState<File | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
 
-  const isImageFile = (content: string) => {
-    // Simple check for image URLs or base64
-    return content.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i) || content.startsWith('data:image/')
-  }
-
-  const isPdfFile = (content: string) => {
-    return content.match(/\.pdf$/i) || content.startsWith('data:application/pdf')
-  }
+  const isTextLike = type === 'text' || type === 'code'
 
   useEffect(() => {
-    // Auto-detect code type based on content
+    // Auto-detect code vs text based on content.
     if (content.trim()) {
-      if (content.includes('```') || content.includes('{') || content.includes('function') || content.includes('import')) {
-        setType('code')
-      } else if (isImageFile(content)) {
-        setType('image')
-      } else if (isPdfFile(content)) {
-        setType('pdf')
+      if (
+        content.includes('```') ||
+        content.includes('{') ||
+        content.includes('function') ||
+        content.includes('import')
+      ) {
+        setType((t) => (t === 'text' ? 'code' : t))
       }
     }
   }, [content])
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0]
-    if (selectedFile) {
-      if (selectedFile.size > 10 * 1024 * 1024) { // 10MB limit
-        toast({
-          title: 'File too large',
-          description: 'File size must be less than 10MB.',
-          variant: 'destructive',
-        })
-        return
-      }
+  const acceptsFile = (file: File) => {
+    const ext = file.name.split('.').pop()?.toLowerCase() || ''
+    return type === 'image'
+      ? file.type.startsWith('image/') || IMAGE_EXTS.includes(ext)
+      : file.type === 'application/pdf' || ext === 'pdf'
+  }
 
-      setFile(selectedFile)
-      
-      // Auto-detect type based on file extension
-      const ext = selectedFile.name.split('.').pop()?.toLowerCase()
-      if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext || '')) {
-        setType('image')
-      } else if (ext === 'pdf') {
-        setType('pdf')
-      }
+  // Validate and upload selected/dropped files immediately (no "Add Clip" step).
+  const handleFilesChosen = async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0 || !onAddFiles) return
+    const max = MAX_FILES[type] ?? 1
+
+    let files = Array.from(fileList).filter(acceptsFile)
+    const tooBig = files.filter((f) => f.size > MAX_SIZE)
+    files = files.filter((f) => f.size <= MAX_SIZE)
+
+    let capped = false
+    if (files.length > max) {
+      files = files.slice(0, max)
+      capped = true
     }
+
+    if (files.length === 0) {
+      toast({
+        title: 'No valid files',
+        description: `Select ${type === 'image' ? 'images' : 'PDFs'} under 10MB.`,
+        variant: 'destructive',
+      })
+      return
+    }
+    if (tooBig.length > 0) {
+      toast({ title: 'Some files skipped', description: `${tooBig.length} file(s) over 10MB were skipped.` })
+    }
+    if (capped) {
+      toast({ title: 'Limit reached', description: `Only the first ${max} were added.` })
+    }
+
+    setIsUploading(true)
+    await onAddFiles(files, type)
+    setIsUploading(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -108,108 +124,26 @@ export function ClipInput({ onAddClip, isLoading = false }: ClipInputProps) {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     e.currentTarget.classList.remove('border-primary', 'bg-accent')
-    
-    const droppedFile = e.dataTransfer.files?.[0]
-    if (droppedFile) {
-      if (droppedFile.size > 10 * 1024 * 1024) { // 10MB limit
-        toast({
-          title: 'File too large',
-          description: 'File size must be less than 10MB.',
-          variant: 'destructive',
-        })
-        return
-      }
-
-      setFile(droppedFile)
-      
-      // Auto-detect type based on file extension
-      const ext = droppedFile.name.split('.').pop()?.toLowerCase()
-      if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext || '')) {
-        setType('image')
-      } else if (ext === 'pdf') {
-        setType('pdf')
-      }
-    }
+    handleFilesChosen(e.dataTransfer.files)
   }
 
   const handleSubmit = async (e: React.SyntheticEvent) => {
     e.preventDefault()
-    
-    if (type === 'text' || type === 'code') {
-      if (!content.trim()) {
-        toast({
-          title: 'Empty content',
-          description: 'Please enter some content.',
-          variant: 'destructive',
-        })
-        return
-      }
-
-      onAddClip({
-        type,
-        content: content.trim(),
-        language: type === 'code' ? language : undefined,
-      })
-      setContent('')
-      setLanguage('javascript')
-    } else if (type === 'image' || type === 'pdf') {
-      if (!file) {
-        toast({
-          title: 'No file selected',
-          description: 'Please select or drag and drop a file.',
-          variant: 'destructive',
-        })
-        return
-      }
-
-      setIsUploading(true)
-
-      // Upload the file to the private "clips-files" bucket, namespaced by user id.
-      const { data: userData } = await supabase.auth.getUser()
-      const userId = userData.user?.id
-      if (!userId) {
-        toast({
-          title: 'Not signed in',
-          description: 'Your session expired. Please sign in again.',
-          variant: 'destructive',
-        })
-        setIsUploading(false)
-        return
-      }
-
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-      const filePath = `${userId}/${Date.now()}-${safeName}`
-
-      const { error: uploadError } = await supabase.storage
-        .from('clips-files')
-        .upload(filePath, file, { contentType: file.type, upsert: false })
-
-      if (uploadError) {
-        toast({
-          title: 'Upload failed',
-          description: uploadError.message,
-          variant: 'destructive',
-        })
-        setIsUploading(false)
-        return
-      }
-
-      onAddClip({
-        type,
-        file_path: filePath,
-        file_name: file.name,
-      })
-      setFile(null)
-      setType('text')
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
-      }
-      setIsUploading(false)
+    if (!isTextLike) return
+    if (!content.trim()) {
+      toast({ title: 'Empty content', description: 'Please enter some content.', variant: 'destructive' })
+      return
     }
+    onAddClip({
+      type,
+      content: content.trim(),
+      language: type === 'code' ? language : undefined,
+    })
+    setContent('')
+    setLanguage('javascript')
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Ctrl+Enter (or Cmd+Enter on macOS) submits the form.
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault()
       handleSubmit(e)
@@ -218,19 +152,17 @@ export function ClipInput({ onAddClip, isLoading = false }: ClipInputProps) {
 
   const clearInput = () => {
     setContent('')
-    setFile(null)
     setType('text')
     setLanguage('javascript')
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
   }
+
+  const max = MAX_FILES[type] ?? 1
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Add New Clip</CardTitle>
-        <CardDescription>Enter text, code, or upload an image/PDF</CardDescription>
+        <CardDescription>Enter text or code, or drop in images and PDFs</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -250,41 +182,59 @@ export function ClipInput({ onAddClip, isLoading = false }: ClipInputProps) {
             ))}
           </div>
 
-          {/* Content Input */}
-          {type === 'text' || type === 'code' ? (
-            <div className="space-y-2">
-              <Label htmlFor="content">Content</Label>
-              <Textarea
-                id="content"
-                placeholder={`Enter your ${type} content...`}
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                onKeyDown={handleKeyDown}
-                rows={6}
-              />
-              {type === 'code' && (
+          {isTextLike ? (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="content">Content</Label>
+                <Textarea
+                  id="content"
+                  placeholder={`Enter your ${type} content...`}
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  rows={6}
+                />
+                {type === 'code' && (
+                  <div className="flex space-x-2">
+                    <Label htmlFor="language" className="text-sm text-muted-foreground">
+                      Language:
+                    </Label>
+                    <Select value={language} onValueChange={setLanguage}>
+                      <SelectTrigger className="w-[200px]">
+                        <SelectValue placeholder="Select language" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {LANGUAGE_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+
+              {/* Actions (text/code only) */}
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex space-x-2">
-                  <Label htmlFor="language" className="text-sm text-muted-foreground">
-                    Language:
-                  </Label>
-                  <Select value={language} onValueChange={setLanguage}>
-                    <SelectTrigger className="w-[200px]">
-                      <SelectValue placeholder="Select language" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {LANGUAGE_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Button type="submit" disabled={isLoading}>
+                    <Icons.plus className="mr-2 h-4 w-4" />
+                    Add Clip
+                  </Button>
+                  <Button type="button" variant="outline" onClick={clearInput}>
+                    Clear
+                  </Button>
                 </div>
-              )}
-            </div>
+                <div className="hidden text-sm text-muted-foreground sm:block">
+                  Tip: Press Ctrl+Enter to submit
+                </div>
+              </div>
+            </>
           ) : (
+            // Image / PDF dropzone: files upload instantly on select or drop.
             <div
-              className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary transition-colors"
+              className="rounded-lg border-2 border-dashed border-gray-300 p-6 text-center transition-colors hover:border-primary"
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
@@ -292,49 +242,33 @@ export function ClipInput({ onAddClip, isLoading = false }: ClipInputProps) {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept={type === 'image' ? 'image/*' : type === 'pdf' ? '.pdf' : ''}
-                onChange={handleFileSelect}
+                multiple
+                accept={type === 'image' ? 'image/*' : '.pdf'}
+                onChange={(e) => handleFilesChosen(e.target.files)}
                 className="hidden"
                 id="file-input"
               />
               <Label htmlFor="file-input" className="cursor-pointer">
                 <div className="space-y-2">
-                  <Icons.image className="mx-auto h-12 w-12 text-gray-400" />
+                  {isUploading ? (
+                    <Icons.spinner className="mx-auto h-10 w-10 animate-spin text-primary" />
+                  ) : type === 'image' ? (
+                    <Icons.image className="mx-auto h-10 w-10 text-gray-400" />
+                  ) : (
+                    <Icons.file className="mx-auto h-10 w-10 text-gray-400" />
+                  )}
                   <div className="text-sm font-medium">
-                    {file ? file.name : `Drag and drop or click to select ${type}`}
+                    {isUploading
+                      ? 'Uploading...'
+                      : `Drag and drop or click to select ${type === 'image' ? 'images' : 'PDFs'}`}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    Maximum file size: 10MB
+                    Up to {max} {type === 'image' ? 'images' : 'PDFs'} at once, 10MB each. They are added instantly.
                   </div>
                 </div>
               </Label>
             </div>
           )}
-
-          {/* Actions */}
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex space-x-2">
-              <Button type="submit" disabled={isLoading || isUploading}>
-                {isLoading || isUploading ? (
-                  <>
-                    <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
-                    Adding...
-                  </>
-                ) : (
-                  <>
-                    <Icons.plus className="mr-2 h-4 w-4" />
-                    Add Clip
-                  </>
-                )}
-              </Button>
-              <Button type="button" variant="outline" onClick={clearInput}>
-                Clear
-              </Button>
-            </div>
-            <div className="hidden text-sm text-muted-foreground sm:block">
-              Tip: Press Ctrl+Enter to submit
-            </div>
-          </div>
         </form>
       </CardContent>
     </Card>

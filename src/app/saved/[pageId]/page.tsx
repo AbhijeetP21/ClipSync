@@ -9,34 +9,39 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { ClipInput } from '@/components/clip-input'
 import { ClipCard } from '@/components/clip-card'
+import { ClipBatchCard } from '@/components/clip-batch-card'
 import {
   DndContext,
   PointerSensor,
   useSensor,
   useSensors,
 } from '@dnd-kit/core'
-import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Icons } from '@/components/icons'
-import { SavedNote } from '@/types'
+import { groupItems } from '@/lib/group-clips'
+import { SavedNote, ClipType } from '@/types'
 
-interface SortableNoteProps {
-  note: SavedNote
-  onDelete: (id: string) => void
-  onToggleCollapse: (id: string) => void
-}
-
-function SortableNote({ note, onDelete, onToggleCollapse }: SortableNoteProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: note.id,
-  })
+// Sortable wrapper with a dedicated drag handle. Wraps a single note card or a
+// whole batch card so either can be reordered as one unit, while keeping the
+// card's own buttons clickable.
+function SortableShell({ id, children }: { id: string; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -46,7 +51,6 @@ function SortableNote({ note, onDelete, onToggleCollapse }: SortableNoteProps) {
 
   return (
     <div ref={setNodeRef} style={style} className="flex items-start gap-2">
-      {/* Dedicated drag handle — keeps card buttons (delete/copy/etc.) clickable. */}
       <button
         type="button"
         className="mt-4 cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing"
@@ -56,14 +60,7 @@ function SortableNote({ note, onDelete, onToggleCollapse }: SortableNoteProps) {
       >
         <Icons.grip className="h-5 w-5" />
       </button>
-      <div className="flex-1">
-        <ClipCard
-          clip={note}
-          onDelete={() => onDelete(note.id)}
-          onSave={() => {}} // Notes are already saved
-          onToggleCollapse={() => onToggleCollapse(note.id)}
-        />
-      </div>
+      <div className="min-w-0 flex-1">{children}</div>
     </div>
   )
 }
@@ -84,19 +81,24 @@ export default function SavedPage() {
     pages,
     notes,
     createNote,
+    createFileNotes,
     deleteNote,
+    deleteNotes,
     restoreNote,
     permanentlyDeleteNote,
     purgeExpiredTrash,
     getTrashedNotes,
     updateNote,
-    reorderNotes,
+    updatePage,
+    setNotePositions,
     getNotesByPage,
   } = useSavedPages()
   const { toast } = useToast()
   const [isInputExpanded, setIsInputExpanded] = useState(false)
   const [isTrashOpen, setIsTrashOpen] = useState(false)
   const [trashedNotes, setTrashedNotes] = useState<SavedNote[]>([])
+  const [isRenameOpen, setIsRenameOpen] = useState(false)
+  const [renameValue, setRenameValue] = useState('')
 
   // Require an 8px drag before activating, so plain clicks reach the buttons.
   const sensors = useSensors(
@@ -105,6 +107,8 @@ export default function SavedPage() {
 
   const currentPage = pages.find((p) => p.id === pageId)
   const pageNotes = getNotesByPage(pageId)
+  const noteGroups = groupItems(pageNotes)
+  const sortableUnitIds = noteGroups.map((g) => g.key)
 
   const loadTrash = useCallback(async () => {
     await purgeExpiredTrash(pageId)
@@ -127,6 +131,31 @@ export default function SavedPage() {
         description: 'Failed to add note. Please try again.',
         variant: 'destructive',
       })
+    }
+  }
+
+  const handleAddNoteFiles = async (files: File[], type: ClipType) => {
+    const created = await createFileNotes(pageId, files, type)
+    if (created.length > 0) {
+      toast({
+        title: created.length > 1 ? `Added ${created.length} files` : 'File added',
+        description: 'Added to this page.',
+      })
+      setIsInputExpanded(false)
+    } else {
+      toast({ title: 'Upload failed', description: 'Please try again.', variant: 'destructive' })
+    }
+  }
+
+  const handleDeleteMany = async (ids: string[]) => {
+    const success = await deleteNotes(ids)
+    if (success) {
+      toast({
+        title: 'Moved to Trash',
+        description: `${ids.length} note${ids.length > 1 ? 's' : ''} moved to trash.`,
+      })
+    } else {
+      toast({ title: 'Error', description: 'Failed to delete.', variant: 'destructive' })
     }
   }
 
@@ -174,16 +203,43 @@ export default function SavedPage() {
 
   const handleDragEnd = async (event: any) => {
     const { active, over } = event
-    if (!over) return
-    if (active.id !== over.id) {
-      const newIndex = pageNotes.findIndex((note) => note.id === over.id)
-      await reorderNotes(pageId, active.id, newIndex)
-    }
+    if (!over || active.id === over.id) return
+    const oldIndex = noteGroups.findIndex((g) => g.key === active.id)
+    const newIndex = noteGroups.findIndex((g) => g.key === over.id)
+    if (oldIndex === -1 || newIndex === -1) return
+
+    // Reorder whole units (a single note, or a batch as one block), then flatten
+    // to an absolute list of note ids and persist their new positions.
+    const reordered = arrayMove(noteGroups, oldIndex, newIndex)
+    const orderedIds = reordered.flatMap((g) =>
+      g.kind === 'batch' ? g.items.map((i) => i.id) : [g.item.id]
+    )
+    await setNotePositions(orderedIds)
   }
 
   const openTrash = async () => {
     setIsTrashOpen(true)
     await loadTrash()
+  }
+
+  const openRename = () => {
+    setRenameValue(currentPage?.name ?? '')
+    setIsRenameOpen(true)
+  }
+
+  const handleRename = async () => {
+    const name = renameValue.trim()
+    if (!name) {
+      toast({ title: 'Error', description: 'Page name cannot be empty.', variant: 'destructive' })
+      return
+    }
+    const success = await updatePage(pageId, { name })
+    if (success) {
+      toast({ title: 'Renamed', description: 'Your page has been renamed.' })
+      setIsRenameOpen(false)
+    } else {
+      toast({ title: 'Error', description: 'Failed to rename. Please try again.', variant: 'destructive' })
+    }
   }
 
   const trashLabel = (note: SavedNote) => {
@@ -217,6 +273,10 @@ export default function SavedPage() {
           <span className="text-sm text-muted-foreground">{pageNotes.length} notes</span>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={openRename}>
+            <Icons.edit className="mr-2 h-4 w-4" />
+            Rename
+          </Button>
           <Button variant="outline" onClick={openTrash}>
             <Icons.trash className="mr-2 h-4 w-4" />
             Trash
@@ -237,7 +297,7 @@ export default function SavedPage() {
         <>
           <Separator />
           <div className="p-4">
-            <ClipInput onAddClip={handleAddNote} />
+            <ClipInput onAddClip={handleAddNote} onAddFiles={handleAddNoteFiles} />
           </div>
           <Separator />
         </>
@@ -260,18 +320,21 @@ export default function SavedPage() {
                 </span>
               </div>
               <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-                <SortableContext
-                  items={pageNotes.map((n) => n.id)}
-                  strategy={verticalListSortingStrategy}
-                >
+                <SortableContext items={sortableUnitIds} strategy={verticalListSortingStrategy}>
                   <div className="space-y-4">
-                    {pageNotes.map((note) => (
-                      <SortableNote
-                        key={note.id}
-                        note={note}
-                        onDelete={() => handleDeleteNote(note.id)}
-                        onToggleCollapse={() => handleToggleCollapse(note.id)}
-                      />
+                    {noteGroups.map((group) => (
+                      <SortableShell key={group.key} id={group.key}>
+                        {group.kind === 'batch' ? (
+                          <ClipBatchCard items={group.items} onDelete={handleDeleteMany} />
+                        ) : (
+                          <ClipCard
+                            clip={group.item}
+                            onDelete={() => handleDeleteNote(group.item.id)}
+                            onSave={() => {}}
+                            onToggleCollapse={() => handleToggleCollapse(group.item.id)}
+                          />
+                        )}
+                      </SortableShell>
                     ))}
                   </div>
                 </SortableContext>
@@ -280,6 +343,38 @@ export default function SavedPage() {
           )}
         </div>
       </ScrollArea>
+
+      {/* Rename dialog */}
+      <Dialog open={isRenameOpen} onOpenChange={setIsRenameOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename page</DialogTitle>
+            <DialogDescription>Give this page a new name.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="rename">Page name</Label>
+            <Input
+              id="rename"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  handleRename()
+                }
+              }}
+              placeholder="Enter page name..."
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button onClick={handleRename}>
+              <Icons.save className="mr-2 h-4 w-4" />
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Trash dialog */}
       <Dialog open={isTrashOpen} onOpenChange={setIsTrashOpen}>

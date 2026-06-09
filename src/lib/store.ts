@@ -52,12 +52,16 @@ export const useStore = create<AppState>()(
     setClips: (clips) => set((state) => ({
       clips: { ...state.clips, ...clips }
     })),
-    addClip: (clip) => set((state) => ({
-      clips: {
-        ...state.clips,
-        clips: [clip, ...state.clips.clips]
-      }
-    })),
+    addClip: (clip) => set((state) =>
+      state.clips.clips.some((c) => c.id === clip.id)
+        ? state
+        : {
+            clips: {
+              ...state.clips,
+              clips: [clip, ...state.clips.clips]
+            }
+          }
+    ),
     removeClip: (id) => set((state) => ({
       clips: {
         ...state.clips,
@@ -106,12 +110,16 @@ export const useStore = create<AppState>()(
     })),
     
     // Saved notes state
-    addSavedNote: (note) => set((state) => ({
-      savedPages: {
-        ...state.savedPages,
-        notes: [...state.savedPages.notes, note]
-      }
-    })),
+    addSavedNote: (note) => set((state) =>
+      state.savedPages.notes.some((n) => n.id === note.id)
+        ? state
+        : {
+            savedPages: {
+              ...state.savedPages,
+              notes: [...state.savedPages.notes, note]
+            }
+          }
+    ),
     removeSavedNote: (id) => set((state) => ({
       savedPages: {
         ...state.savedPages,

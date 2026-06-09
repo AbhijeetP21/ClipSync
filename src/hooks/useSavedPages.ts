@@ -2,7 +2,8 @@ import { useEffect } from 'react'
 import { useStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { subscribeToSavedNotes } from '@/lib/realtime'
-import { SavedPage, SavedNote } from '@/types'
+import { uploadClipFile } from '@/lib/storage'
+import { SavedPage, SavedNote, ClipType } from '@/types'
 
 export const useSavedPages = () => {
   const { savedPages, setSavedPages, addSavedPage, removeSavedPage, updateSavedPage, addSavedNote, removeSavedNote, updateSavedNote } = useStore()
@@ -33,6 +34,7 @@ export const useSavedPages = () => {
         .eq('user_id', auth.user!.id)
         .is('deleted_at', null)
         .order('position', { ascending: true })
+        .order('created_at', { ascending: true })
 
       if (notesError) {
         setSavedPages({ isLoading: false, error: notesError.message })
@@ -133,6 +135,62 @@ export const useSavedPages = () => {
 
     addSavedNote(data as SavedNote)
     return data
+  }
+
+  // Upload one or more files directly into a page as notes. Multiple files
+  // uploaded together share a group_id so they render as a batch.
+  const createFileNotes = async (
+    pageId: string,
+    files: File[],
+    type: ClipType
+  ): Promise<SavedNote[]> => {
+    if (!auth.user || files.length === 0) return []
+    const groupId = files.length > 1 ? crypto.randomUUID() : null
+    const basePosition = savedPages.notes.filter((n) => n.page_id === pageId).length
+
+    const rows: Array<Record<string, unknown>> = []
+    let i = 0
+    for (const file of files) {
+      const uploaded = await uploadClipFile(file)
+      if (!uploaded) continue
+      rows.push({
+        user_id: auth.user.id,
+        page_id: pageId,
+        type,
+        file_path: uploaded.file_path,
+        file_name: uploaded.file_name,
+        collapsed: false,
+        group_id: groupId,
+        position: basePosition + i,
+        created_at: new Date().toISOString(),
+      })
+      i++
+    }
+
+    if (rows.length === 0) return []
+
+    const { data, error } = await supabase.from('saved_notes').insert(rows).select()
+    if (error) {
+      console.error('Error creating file notes:', error)
+      return []
+    }
+
+    ;(data as SavedNote[]).forEach((n) => addSavedNote(n))
+    return data as SavedNote[]
+  }
+
+  // Batch soft-delete: move several notes to the trash at once.
+  const deleteNotes = async (ids: string[]) => {
+    const { error } = await supabase
+      .from('saved_notes')
+      .update({ deleted_at: new Date().toISOString() })
+      .in('id', ids)
+    if (error) {
+      console.error('Error trashing notes:', error)
+      return false
+    }
+    ids.forEach((id) => removeSavedNote(id))
+    return true
   }
 
   // Soft-delete: move the note to the trash (kept for 7 days). The storage file
@@ -281,10 +339,30 @@ export const useSavedPages = () => {
     return true
   }
 
+  // Persist an absolute new ordering of notes (used by drag-and-drop reorder of
+  // both single notes and whole batches).
+  const setNotePositions = async (orderedIds: string[]) => {
+    const results = await Promise.all(
+      orderedIds.map((id, index) =>
+        supabase.from('saved_notes').update({ position: index }).eq('id', id)
+      )
+    )
+    const failed = results.find((r) => r.error)
+    if (failed?.error) {
+      console.error('Error reordering notes:', failed.error)
+      return false
+    }
+    orderedIds.forEach((id, index) => updateSavedNote(id, { position: index }))
+    return true
+  }
+
   const getNotesByPage = (pageId: string) => {
+    // Sort by position, then created_at as a stable tiebreaker, so the in-memory
+    // order always matches the order returned by the database fetch (prevents
+    // items jumping around after a delete until the page is refreshed).
     return savedPages.notes
       .filter(note => note.page_id === pageId)
-      .sort((a, b) => a.position - b.position)
+      .sort((a, b) => a.position - b.position || a.created_at.localeCompare(b.created_at))
   }
 
   const getPagesWithCounts = () => {
@@ -301,13 +379,16 @@ export const useSavedPages = () => {
     deletePage,
     updatePage,
     createNote,
+    createFileNotes,
     deleteNote,
+    deleteNotes,
     restoreNote,
     permanentlyDeleteNote,
     purgeExpiredTrash,
     getTrashedNotes,
     updateNote,
     reorderNotes,
+    setNotePositions,
     getNotesByPage,
   }
 }
