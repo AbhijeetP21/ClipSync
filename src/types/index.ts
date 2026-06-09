@@ -19,6 +19,7 @@ export interface Clip {
   collapsed: boolean
   created_at: string
   date_bucket: string
+  group_id?: string | null
 }
 
 // Saved page types
@@ -45,6 +46,7 @@ export interface SavedNote {
   position: number
   created_at: string
   deleted_at?: string | null
+  group_id?: string | null
 }
 
 // Config types

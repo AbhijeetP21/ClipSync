@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { supabase } from '@/lib/supabase'
+import { getSignedUrl } from '@/lib/storage'
 import { useStore } from '@/lib/store'
+import { copyImageToClipboard } from '@/lib/clipboard-image'
 import { useToast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
@@ -41,17 +43,11 @@ export function ClipCard({ clip, onDelete, onSave, onToggleCollapse }: ClipCardP
     let active = true
     if (isFile && clip.file_path) {
       setPreviewError(false)
-      supabase.storage
-        .from(BUCKET)
-        .createSignedUrl(clip.file_path, 3600)
-        .then(({ data, error }) => {
-          if (!active) return
-          if (error || !data) {
-            setPreviewError(true)
-          } else {
-            setPreviewUrl(data.signedUrl)
-          }
-        })
+      getSignedUrl(clip.file_path).then((url) => {
+        if (!active) return
+        if (url) setPreviewUrl(url)
+        else setPreviewError(true)
+      })
     }
     return () => {
       active = false
@@ -63,6 +59,17 @@ export function ClipCard({ clip, onDelete, onSave, onToggleCollapse }: ClipCardP
       if (clip.type === 'text' || clip.type === 'code') {
         await navigator.clipboard.writeText(clip.content || '')
         toast({ title: 'Copied!', description: 'Content copied to clipboard.' })
+      } else if (clip.type === 'image' && previewUrl) {
+        const ok = await copyImageToClipboard(previewUrl)
+        if (ok) {
+          toast({ title: 'Image copied', description: 'The image is on your clipboard.' })
+        } else {
+          await navigator.clipboard.writeText(previewUrl)
+          toast({
+            title: 'Link copied',
+            description: 'Image copy is not supported here, so a link was copied instead.',
+          })
+        }
       } else if (previewUrl) {
         await navigator.clipboard.writeText(previewUrl)
         toast({ title: 'Link copied', description: 'A temporary file link was copied to your clipboard.' })
@@ -209,6 +216,7 @@ export function ClipCard({ clip, onDelete, onSave, onToggleCollapse }: ClipCardP
               <img
                 src={previewUrl}
                 alt={clip.file_name || 'image'}
+                loading="lazy"
                 className="max-h-80 w-auto rounded-md border object-contain"
               />
             ) : (

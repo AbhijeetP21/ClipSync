@@ -19,11 +19,14 @@ const EMOJI_OPTIONS = [
 ]
 
 export default function SavedPagesPage() {
-  const { pages, createPage, deletePage } = useSavedPages()
+  const { pages, createPage, deletePage, updatePage } = useSavedPages()
   const { toast } = useToast()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [pageName, setPageName] = useState('')
   const [selectedEmoji, setSelectedEmoji] = useState('📄')
+  const [editPageId, setEditPageId] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editEmoji, setEditEmoji] = useState('📄')
 
   const handleCreatePage = async () => {
     if (!pageName.trim()) {
@@ -50,6 +53,27 @@ export default function SavedPagesPage() {
         description: 'Failed to create page. Please try again.',
         variant: 'destructive',
       })
+    }
+  }
+
+  const openEdit = (page: { id: string; name: string; emoji: string }) => {
+    setEditPageId(page.id)
+    setEditName(page.name)
+    setEditEmoji(page.emoji || '📄')
+  }
+
+  const handleUpdatePage = async () => {
+    if (!editPageId) return
+    if (!editName.trim()) {
+      toast({ title: 'Error', description: 'Please enter a page name.', variant: 'destructive' })
+      return
+    }
+    const success = await updatePage(editPageId, { name: editName.trim(), emoji: editEmoji })
+    if (success) {
+      toast({ title: 'Page Updated', description: 'Your page has been updated.' })
+      setEditPageId(null)
+    } else {
+      toast({ title: 'Error', description: 'Failed to update page. Please try again.', variant: 'destructive' })
     }
   }
 
@@ -158,17 +182,31 @@ export default function SavedPagesPage() {
                             </CardDescription>
                           </div>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.preventDefault()
-                            handleDeletePage(page.id, page.name)
-                          }}
-                          className="text-destructive hover:text-destructive/90"
-                        >
-                          <Icons.trash className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              openEdit(page)
+                            }}
+                            aria-label="Rename page"
+                          >
+                            <Icons.edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              handleDeletePage(page.id, page.name)
+                            }}
+                            className="text-destructive hover:text-destructive/90"
+                            aria-label="Delete page"
+                          >
+                            <Icons.trash className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                     </CardHeader>
                     <CardContent>
@@ -183,6 +221,55 @@ export default function SavedPagesPage() {
           )}
         </div>
       </ScrollArea>
+
+      {/* Edit page dialog */}
+      <Dialog open={editPageId !== null} onOpenChange={(open) => !open && setEditPageId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit page</DialogTitle>
+            <DialogDescription>Update the name and emoji for this page.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-page-name">Page Name</Label>
+              <Input
+                id="edit-page-name"
+                placeholder="Enter page name..."
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    handleUpdatePage()
+                  }
+                }}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Emoji</Label>
+              <div className="grid grid-cols-10 gap-2">
+                {EMOJI_OPTIONS.map((emoji) => (
+                  <Button
+                    key={emoji}
+                    variant={editEmoji === emoji ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setEditEmoji(emoji)}
+                    className="text-lg"
+                  >
+                    {emoji}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleUpdatePage}>
+              <Icons.save className="mr-2 h-4 w-4" />
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
