@@ -142,9 +142,11 @@ export function ClipCard({ clip, onDelete, onSave, onToggleCollapse }: ClipCardP
   }
 
   const renderFileHeader = () => (
-    <div className="flex items-center justify-between">
-      <span className="text-sm text-muted-foreground">{clip.file_name}</span>
-      <Button variant="outline" size="sm" onClick={handleDownload}>
+    <div className="flex items-center justify-between gap-2">
+      <span className="min-w-0 truncate text-sm text-muted-foreground" title={clip.file_name || ''}>
+        {clip.file_name}
+      </span>
+      <Button variant="outline" size="sm" className="shrink-0" onClick={handleDownload}>
         <Icons.download className="mr-2 h-4 w-4" />
         Download
       </Button>
@@ -156,7 +158,7 @@ export function ClipCard({ clip, onDelete, onSave, onToggleCollapse }: ClipCardP
       case 'text':
         return (
           <div className="space-y-2">
-            <p className="text-sm whitespace-pre-wrap">{formatContent(clip.content || '')}</p>
+            <p className="text-sm whitespace-pre-wrap break-words">{formatContent(clip.content || '')}</p>
             {clip.content && clip.content.length > 200 && (
               <Button
                 variant="ghost"
@@ -185,6 +187,8 @@ export function ClipCard({ clip, onDelete, onSave, onToggleCollapse }: ClipCardP
                 margin: 0,
                 borderRadius: '0.5rem',
                 maxHeight: '15rem',
+                maxWidth: '100%',
+                overflow: 'auto',
                 fontSize: '0.8125rem',
               }}
             >
@@ -255,7 +259,7 @@ export function ClipCard({ clip, onDelete, onSave, onToggleCollapse }: ClipCardP
   }
 
   return (
-    <Card className="hover:shadow-md transition-shadow">
+    <Card className="hover:shadow-md transition-shadow min-w-0">
       <CardHeader className="pb-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center space-x-2">
