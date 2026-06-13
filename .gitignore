@@ -34,6 +34,9 @@ yarn-error.log*
 # personal interview/resume prep, not for the public repo
 PROJECT_DOSSIER.md
 
+# local DevSecOps/architecture audit reports, not for the public repo
+.projectmaid/
+
 # env files (can opt-in for committing if needed)
 .env*
 !.env.local.example

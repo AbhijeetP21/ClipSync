@@ -213,7 +213,7 @@ export default function ClipboardPage() {
             groupedClips.map(([date, dateClips]) => (
               <div key={date} className="space-y-4">
                 <h2 className="text-lg font-semibold text-muted-foreground">{formatDate(date)}</h2>
-                <div className="grid gap-4">
+                <div className="grid grid-cols-1 gap-4">
                   {groupItems(dateClips as Clip[]).map((group) =>
                     group.kind === 'batch' ? (
                       <ClipBatchCard
